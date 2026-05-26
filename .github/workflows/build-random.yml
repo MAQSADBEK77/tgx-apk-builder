@@ -1,4 +1,4 @@
-﻿name: Build Random Telegram X APK
+name: Build Random Telegram X APK
 
 on:
   push:
