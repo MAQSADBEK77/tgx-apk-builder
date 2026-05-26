@@ -1,15 +1,10 @@
 name: Build Random Telegram X APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      custom_name:
-        description: 'Ilova nomi (bosh qolsa random boladi)'
-        required: false
-        default: ''
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,19 +16,14 @@ jobs:
         id: identity
         run: |
           RAND=$(shuf -i 1000-9999 -n 1)
-          CUSTOM="${{ github.event.inputs.custom_name }}"
-          if [ -z "$CUSTOM" ]; then
-            NAMES=("Galaxy" "Nova" "Pixel" "Comet" "Nebula" "Orbit" "Pulsar" "Quasar" "Zenith" "Aurora")
-            IDX=$(( RANDOM % 10 ))
-            APP_NAME="${NAMES[$IDX]} $RAND"
-          else
-            APP_NAME="$CUSTOM"
-          fi
+          NAMES=("Galaxy" "Nova" "Pixel" "Comet" "Nebula" "Orbit" "Pulsar" "Quasar" "Zenith" "Aurora")
+          IDX=$(( RANDOM % 10 ))
+          APP_NAME="${NAMES[$IDX]} $RAND"
           PKG_SUFFIX=$(openssl rand -hex 3)
           APP_ID="org.tgx.app.${PKG_SUFFIX}"
           echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
           echo "APP_ID=${APP_ID}" >> $GITHUB_OUTPUT
-          echo "App nomi: ${APP_NAME} | Package: ${APP_ID}"
+          echo "App: ${APP_NAME} | ID: ${APP_ID}"
 
       - name: Clone Telegram X source
         run: |
@@ -75,7 +65,6 @@ jobs:
           elif [ -f app/build.gradle ]; then
             sed -i "s|applicationId \"org\.thunderdog\.challegram\"|applicationId \"${APP_ID}\"|g" app/build.gradle
           fi
-          echo "Patch: ${APP_NAME} / ${APP_ID}"
 
       - name: Build Debug APK
         working-directory: tgx
@@ -89,10 +78,3 @@ jobs:
           name: ${{ steps.identity.outputs.APP_NAME }}
           path: tgx/app/build/outputs/apk/debug/*.apk
           retention-days: 30
-
-      - name: Build summary
-        run: |
-          echo "## Build tayyor!" >> $GITHUB_STEP_SUMMARY
-          echo "| **Ilova nomi** | ${{ steps.identity.outputs.APP_NAME }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Package ID** | ${{ steps.identity.outputs.APP_ID }} |" >> $GITHUB_STEP_SUMMARY
-          echo "APK ni Artifacts bolimidan yuklab oling" >> $GITHUB_STEP_SUMMARY
