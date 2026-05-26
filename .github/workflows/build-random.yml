@@ -7,15 +7,14 @@ on:
         description: 'Ilova nomi (bosh qolsa random boladi)'
         required: false
         default: ''
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
-
-    env:
-      TG_API_ID: ${{ secrets.TELEGRAM_API_ID }}
-      TG_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
     steps:
       - name: Generate random app identity
@@ -23,7 +22,6 @@ jobs:
         run: |
           RAND=$(shuf -i 1000-9999 -n 1)
           CUSTOM="${{ github.event.inputs.custom_name }}"
-
           if [ -z "$CUSTOM" ]; then
             NAMES=("Galaxy" "Nova" "Pixel" "Comet" "Nebula" "Orbit" "Pulsar" "Quasar" "Zenith" "Aurora")
             IDX=$(( RANDOM % 10 ))
@@ -31,10 +29,8 @@ jobs:
           else
             APP_NAME="$CUSTOM"
           fi
-
           PKG_SUFFIX=$(openssl rand -hex 3)
           APP_ID="org.tgx.app.${PKG_SUFFIX}"
-
           echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
           echo "APP_ID=${APP_ID}" >> $GITHUB_OUTPUT
           echo "App nomi: ${APP_NAME} | Package: ${APP_ID}"
@@ -63,10 +59,6 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
-          if [ -n "$TG_API_ID" ]; then
-            echo "APP_ID=$TG_API_ID" >> local.properties
-            echo "APP_HASH=$TG_API_HASH" >> local.properties
-          fi
 
       - name: Patch app name and package
         working-directory: tgx
@@ -78,13 +70,11 @@ jobs:
           if [ -n "$XML" ]; then
             sed -i "s|<string name=\"app_name\">[^<]*</string>|<string name=\"app_name\">${APP_NAME}</string>|g" "$XML"
           fi
-
           if [ -f app/build.gradle.kts ]; then
             sed -i "s|applicationId = \"org\.thunderdog\.challegram\"|applicationId = \"${APP_ID}\"|g" app/build.gradle.kts
           elif [ -f app/build.gradle ]; then
             sed -i "s|applicationId \"org\.thunderdog\.challegram\"|applicationId \"${APP_ID}\"|g" app/build.gradle
           fi
-
           echo "Patch: ${APP_NAME} / ${APP_ID}"
 
       - name: Build Debug APK
@@ -103,9 +93,6 @@ jobs:
       - name: Build summary
         run: |
           echo "## Build tayyor!" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Ilova nomi** | ${{ steps.identity.outputs.APP_NAME }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Package ID** | ${{ steps.identity.outputs.APP_ID }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "APK ni **Artifacts** bolimidan yuklab oling" >> $GITHUB_STEP_SUMMARY
+          echo "APK ni Artifacts bolimidan yuklab oling" >> $GITHUB_STEP_SUMMARY
