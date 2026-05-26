@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       custom_name:
-        description: 'Ilov nomi (bo`sh qolsa random bo`ladi)'
+        description: 'Ilova nomi (bosh qolsa random boladi)'
         required: false
         default: ''
 
@@ -13,31 +13,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
+    env:
+      TG_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TG_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+
     steps:
       - name: Generate random app identity
         id: identity
         run: |
-          # Random 4 xonali raqam
           RAND=$(shuf -i 1000-9999 -n 1)
+          CUSTOM="${{ github.event.inputs.custom_name }}"
 
-          # Custom nom berilmagan bo'lsa random nom
-          if [ -z "${{ github.event.inputs.custom_name }}" ]; then
+          if [ -z "$CUSTOM" ]; then
             NAMES=("Galaxy" "Nova" "Pixel" "Comet" "Nebula" "Orbit" "Pulsar" "Quasar" "Zenith" "Aurora")
-            NAME=${NAMES[$RANDOM % ${#NAMES[@]}]}
-            APP_NAME="${NAME} ${RAND}"
+            IDX=$(( RANDOM % 10 ))
+            APP_NAME="${NAMES[$IDX]} $RAND"
           else
-            APP_NAME="${{ github.event.inputs.custom_name }}"
+            APP_NAME="$CUSTOM"
           fi
 
-          PKG_SUFFIX=$(python3 -c "import random,string; print(''.join(random.choices(string.ascii_lowercase,k=6)))")
+          PKG_SUFFIX=$(openssl rand -hex 3)
           APP_ID="org.tgx.app.${PKG_SUFFIX}"
 
           echo "APP_NAME=${APP_NAME}" >> $GITHUB_OUTPUT
           echo "APP_ID=${APP_ID}" >> $GITHUB_OUTPUT
-          echo "RAND=${RAND}" >> $GITHUB_OUTPUT
-
-          echo "App nomi: ${APP_NAME}"
-          echo "Package ID: ${APP_ID}"
+          echo "App nomi: ${APP_NAME} | Package: ${APP_ID}"
 
       - name: Clone Telegram X source
         run: |
@@ -63,65 +63,49 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "ndk.dir=$ANDROID_HOME/ndk/21.4.7075529" >> local.properties
-
-          # Telegram API credentials (GitHub Secrets dan olish)
-          if [ -n "${{ secrets.TELEGRAM_API_ID }}" ]; then
-            echo "APP_ID=${{ secrets.TELEGRAM_API_ID }}" >> local.properties
-            echo "APP_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
+          if [ -n "$TG_API_ID" ]; then
+            echo "APP_ID=$TG_API_ID" >> local.properties
+            echo "APP_HASH=$TG_API_HASH" >> local.properties
           fi
 
-      - name: Patch app name
+      - name: Patch app name and package
         working-directory: tgx
         env:
           APP_NAME: ${{ steps.identity.outputs.APP_NAME }}
           APP_ID: ${{ steps.identity.outputs.APP_ID }}
         run: |
-          # App nomini o'zgartirish
-          find app/src -name "strings.xml" | head -1 | xargs -I{} \
-            sed -i "s|<string name=\"app_name\">[^<]*</string>|<string name=\"app_name\">${APP_NAME}</string>|g" {}
+          XML=$(find app/src -name "strings.xml" | head -1)
+          if [ -n "$XML" ]; then
+            sed -i "s|<string name=\"app_name\">[^<]*</string>|<string name=\"app_name\">${APP_NAME}</string>|g" "$XML"
+          fi
 
-          # Package ID ni o'zgartirish (build.gradle)
-          sed -i "s|applicationId.*\"org\.thunderdog\.challegram\"|applicationId \"${APP_ID}\"|g" \
-            app/build.gradle.kts 2>/dev/null || \
-          sed -i "s|applicationId.*\"org\.thunderdog\.challegram\"|applicationId \"${APP_ID}\"|g" \
-            app/build.gradle 2>/dev/null || true
+          if [ -f app/build.gradle.kts ]; then
+            sed -i "s|applicationId = \"org\.thunderdog\.challegram\"|applicationId = \"${APP_ID}\"|g" app/build.gradle.kts
+          elif [ -f app/build.gradle ]; then
+            sed -i "s|applicationId \"org\.thunderdog\.challegram\"|applicationId \"${APP_ID}\"|g" app/build.gradle
+          fi
 
-          echo "Patch qilindi: ${APP_NAME} / ${APP_ID}"
+          echo "Patch: ${APP_NAME} / ${APP_ID}"
 
       - name: Build Debug APK
         working-directory: tgx
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tail -50
-
-      - name: Find and rename APK
-        id: apk
-        working-directory: tgx
-        env:
-          APP_NAME: ${{ steps.identity.outputs.APP_NAME }}
-        run: |
-          APK_PATH=$(find . -name "*.apk" -path "*/debug/*" | head -1)
-          SAFE_NAME=$(echo "$APP_NAME" | tr ' ' '_')
-          NEW_NAME="${SAFE_NAME}.apk"
-          cp "$APK_PATH" "../${NEW_NAME}"
-          echo "APK_FILE=${NEW_NAME}" >> $GITHUB_OUTPUT
-          echo "APK topildi: ${APK_PATH}"
+          ./gradlew assembleDebug --no-daemon 2>&1 | tail -80
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.identity.outputs.APP_NAME }}
-          path: ${{ steps.apk.outputs.APK_FILE }}
+          path: tgx/app/build/outputs/apk/debug/*.apk
           retention-days: 30
 
       - name: Build summary
         run: |
-          echo "## ✅ Build muvaffaqiyatli!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build tayyor!" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
           echo "| **Ilova nomi** | ${{ steps.identity.outputs.APP_NAME }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Package ID** | ${{ steps.identity.outputs.APP_ID }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Fayl** | ${{ steps.apk.outputs.APK_FILE }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "APK ni **Artifacts** bo'limidan yuklab oling" >> $GITHUB_STEP_SUMMARY
+          echo "APK ni **Artifacts** bolimidan yuklab oling" >> $GITHUB_STEP_SUMMARY
